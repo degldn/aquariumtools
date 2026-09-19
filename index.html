@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aquarium Tools</title>
+<style>
+  :root {
+    --bg: #0d1416; --surface: #131e20; --surface-2: #182628; --line: #26383a;
+    --line-soft: #1d2c2e; --text: #e9f1ee; --muted: #89a09b; --faint: #5f7873;
+    --readout: #57d7b6; --readout-dim: #2c5c52; --warn: #e0a24a; --field-bg: #0a1112;
+    --on-readout: #05201a;
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 24px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #eef2f0; --surface: #ffffff; --surface-2: #f4f7f5; --line: #d3ddda;
+      --line-soft: #e4ebe8; --text: #12201d; --muted: #5a716c; --faint: #8ba09b;
+      --readout: #128a6d; --readout-dim: #a7d9cc; --warn: #a8720f; --field-bg: #f7faf9;
+      --on-readout: #ffffff;
+      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 26px rgba(20,50,44,.08);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1416; --surface: #131e20; --surface-2: #182628; --line: #26383a;
+    --line-soft: #1d2c2e; --text: #e9f1ee; --muted: #89a09b; --faint: #5f7873;
+    --readout: #57d7b6; --readout-dim: #2c5c52; --warn: #e0a24a; --field-bg: #0a1112;
+    --on-readout: #05201a;
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%; line-height: 1.45;
+    padding: max(14px, env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; min-height: 34px; margin: 4px 2px 20px; }
+  .back { font: inherit; font-size: .9rem; color: var(--muted); background: none; border: none; padding: 6px 8px 6px 0; cursor: pointer; display: none; align-items: center; gap: 5px; }
+  .back.show { display: inline-flex; }
+  .back svg { width: 16px; height: 16px; }
+  .brand { font-size: 1.02rem; font-weight: 650; letter-spacing: -0.01em; }
+  .brand .drop { color: var(--readout); }
+  .gear { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; display: inline-flex; }
+  .gear svg { width: 20px; height: 20px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .hub-h { margin: 0 2px 18px; }
+  .hub-h h1 { font-size: 1.5rem; font-weight: 680; letter-spacing: -0.02em; margin: 0 0 10px; display: block; }
+  .hub-h p { color: var(--muted); font-size: .9rem; margin: 0; display: block; }
+
+  .tools { display: grid; gap: 12px; }
+  .tool { display: flex; align-items: center; gap: 14px; text-align: left; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .12s; }
+  .tool:active { border-color: var(--readout); }
+  .tool[disabled] { cursor: default; opacity: .82; }
+  .tool[disabled]:active { border-color: var(--line); }
+  .tool .ic { flex: none; width: 42px; height: 42px; border-radius: 11px; background: var(--surface-2); border: 1px solid var(--line); display: grid; place-items: center; color: var(--readout); }
+  .tool .ic svg { width: 22px; height: 22px; }
+  .tool .body { flex: 1; min-width: 0; }
+  .tool .body .n { display: block; font-weight: 620; font-size: 1rem; }
+  .tool .body .d { display: block; color: var(--muted); font-size: .82rem; margin-top: 3px; }
+  .tool .badge { flex: none; font-size: .68rem; font-weight: 600; letter-spacing: .03em; color: var(--faint); background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+  .tool .chev { flex: none; color: var(--faint); }
+  .tool .chev svg { width: 18px; height: 18px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grouplabel { font-size: .74rem; color: var(--faint); font-weight: 600; letter-spacing: .04em; margin: 2px 2px 10px; }
+  .field label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 5px; }
+  .inputwrap { position: relative; }
+  input[type="number"] { width: 100%; font: inherit; font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 600; background: var(--field-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 11px 42px 11px 12px; -moz-appearance: textfield; }
+  input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input:focus { outline: 2px solid var(--readout); outline-offset: 1px; border-color: transparent; }
+  .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--faint); font-size: .8rem; pointer-events: none; }
+  .divider { height: 1px; background: var(--line-soft); margin: 16px 0; }
+
+  .selbox { width: 100%; font: inherit; font-size: .98rem; background: var(--field-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+  select.selbox { padding-right: 30px; }
+  .selbox:focus { outline: 2px solid var(--readout); outline-offset: 1px; border-color: transparent; }
+
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .toggle .t-text { font-size: .88rem; }
+  .toggle .t-sub { color: var(--muted); font-size: .76rem; margin-top: 2px; }
+  .switch { position: relative; width: 46px; height: 27px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; cursor: pointer; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; transition: background .15s; }
+  .slider::before { content: ""; position: absolute; height: 19px; width: 19px; left: 3px; top: 3px; background: var(--faint); border-radius: 50%; transition: transform .15s, background .15s; }
+  .switch input:checked + .slider { background: var(--readout-dim); border-color: var(--readout); }
+  .switch input:checked + .slider::before { transform: translateX(19px); background: var(--readout); }
+  .switch input:focus-visible + .slider { outline: 2px solid var(--readout); outline-offset: 2px; }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-size: .85rem; color: var(--muted); margin: 2px 2px 12px; }
+  .summary b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .note { display: flex; gap: 8px; align-items: flex-start; background: color-mix(in srgb, var(--warn) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: .82rem; margin: 0 2px 12px; }
+  .note .dot { color: var(--warn); font-weight: 700; line-height: 1.4; }
+
+  .tablecard { padding: 6px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { font-size: .72rem; color: var(--muted); font-weight: 600; text-align: right; padding: 12px 10px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  thead th.vol { text-align: left; }
+  tbody td { text-align: right; padding: 13px 10px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; border-bottom: 1px solid var(--line-soft); font-size: 1.02rem; letter-spacing: -0.01em; color: var(--readout); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.vol { text-align: left; color: var(--text); font-weight: 650; font-size: .95rem; }
+  tbody td.vol span { color: var(--faint); font-weight: 500; font-size: .78rem; }
+  tbody td.zero { color: var(--faint); font-weight: 500; }
+  tbody tr.custom td { border-top: 1px solid var(--line); }
+  tbody tr.custom td.vol { color: var(--readout); }
+
+  .legend { margin: 4px 2px 0; }
+  .legend .grouplabel { margin-bottom: 8px; }
+  .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+  .legend li { font-size: .8rem; color: var(--muted); display: flex; gap: 8px; }
+  .legend code { color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; flex: none; min-width: 92px; }
+
+  .customrow { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-top: 2px; }
+  .customrow .field { min-width: 0; }
+  .clearbtn { font: inherit; font-size: .82rem; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; white-space: nowrap; }
+  .clearbtn:active { background: var(--field-bg); }
+
+  .viewtitle { font-size: 1.28rem; font-weight: 650; letter-spacing: -0.01em; margin: 0 2px 10px; display: block; }
+  .viewsub { color: var(--muted); font-size: .84rem; margin: 0 2px 20px; display: block; }
+
+  .placeholder { color: var(--muted); font-size: .9rem; }
+  .placeholder p { margin: 0 0 12px; }
+  .placeholder ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+
+  .syncchip { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 16px; font-size: .82rem; color: var(--muted); }
+  .syncchip .s-state { display: flex; align-items: center; gap: 7px; }
+  .syncchip .dot2 { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .syncchip .dot2.ok { background: var(--readout); }
+  .syncchip .dot2.pend { background: var(--warn); }
+  .syncchip button { font: inherit; font-size: .8rem; color: var(--readout); background: none; border: none; cursor: pointer; padding: 4px; }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .segbtn { font: inherit; font-size: .85rem; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); cursor: pointer; }
+  .segbtn.on { background: var(--readout-dim); border-color: var(--readout); color: var(--readout); font-weight: 600; }
+
+  .metgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 10px; }
+  .metgrid .field label { margin-bottom: 4px; }
+
+  .savebtn { width: 100%; margin-top: 16px; font: inherit; font-size: 1rem; font-weight: 650; padding: 14px; border: none; border-radius: 12px; background: var(--readout); color: var(--on-readout); cursor: pointer; }
+  .savebtn:active { filter: brightness(.95); }
+  .saved { text-align: center; color: var(--readout); font-size: .84rem; min-height: 18px; margin-top: 8px; }
+
+  .recent .r { display: flex; align-items: flex-start; gap: 10px; padding: 11px 2px; border-bottom: 1px solid var(--line-soft); }
+  .recent .r:last-child { border-bottom: none; }
+  .recent .r .rdot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--readout); }
+  .recent .r .rdot.pend { background: var(--warn); }
+  .recent .r .rbody { flex: 1; min-width: 0; }
+  .recent .r .rhead { font-size: .86rem; }
+  .recent .r .rhead b { font-weight: 620; }
+  .recent .r .rmeta { color: var(--faint); font-size: .76rem; margin-top: 1px; }
+  .recent .r .rvals { color: var(--muted); font-size: .82rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .recent .empty { color: var(--faint); font-size: .84rem; padding: 8px 2px; }
+
+  .btnrow { display: flex; gap: 10px; margin-top: 12px; }
+  .btnrow .selbox { flex: 1; }
+  .hint { color: var(--faint); font-size: .78rem; margin: 10px 2px 0; }
+  .syncline { font-size: .86rem; color: var(--muted); margin-bottom: 12px; }
+  .tankeditor .t { display: flex; align-items: center; justify-content: space-between; padding: 9px 2px; border-bottom: 1px solid var(--line-soft); font-size: .9rem; }
+  .tankeditor .t:last-child { border-bottom: none; }
+  .tankeditor .t button { color: var(--warn); background: none; border: none; font: inherit; font-size: .82rem; cursor: pointer; }
+
+  footer { color: var(--faint); font-size: .76rem; text-align: center; margin-top: 26px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button class="back" id="backBtn" type="button" aria-label="Back to tools">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      Tools
+    </button>
+    <span class="brand"><span class="drop">&#9679;</span> Aquarium Tools</span>
+    <button class="gear" id="gearBtn" type="button" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <!-- HUB -->
+  <section class="view" id="view-hub">
+    <div class="hub-h">
+      <h1>Aquarium Tools</h1>
+      <p>Daniel&rsquo;s Aquarium Data and Tools</p>
+    </div>
+    <div class="tools" id="toolList"></div>
+  </section>
+
+  <!-- REMIN CALCULATOR -->
+  <section class="view" id="view-remin">
+    <h2 class="viewtitle">Remineralization</h2>
+    <p class="viewsub">RO/DI &rarr; house build. Masses in grams per batch.</p>
+    <div class="panel">
+      <div class="grouplabel">Starting water</div>
+      <div class="row2">
+        <div class="field"><label for="startGH">GH now</label><div class="inputwrap"><input type="number" id="startGH" inputmode="decimal" step="0.5" min="0" value="0"><span class="unit">dGH</span></div></div>
+        <div class="field"><label for="startKH">KH now</label><div class="inputwrap"><input type="number" id="startKH" inputmode="decimal" step="0.5" min="0" value="0"><span class="unit">dKH</span></div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="grouplabel">Target</div>
+      <div class="row2">
+        <div class="field"><label for="targetGH">GH target</label><div class="inputwrap"><input type="number" id="targetGH" inputmode="decimal" step="0.5" min="0" value="8"><span class="unit">dGH</span></div></div>
+        <div class="field"><label for="targetKH">KH target</label><div class="inputwrap"><input type="number" id="targetKH" inputmode="decimal" step="0.5" min="0" value="5"><span class="unit">dKH</span></div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="toggle">
+        <div><div class="t-text">Add K&#8322;SO&#8324;</div><div class="t-sub">Potassium supplement, 0.1 g/gal &mdash; independent of hardness</div></div>
+        <label class="switch"><input type="checkbox" id="useK" checked><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div id="notes"></div>
+    <div class="panel tablecard">
+      <table>
+        <thead><tr><th class="vol">Batch</th><th>CaCl&#8322;</th><th>MgSO&#8322;</th><th id="kHead">K&#8322;SO&#8324;</th><th>NaHCO&#8323;</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="customrow">
+        <div class="field"><label for="customVol">Custom batch</label><div class="inputwrap"><input type="number" id="customVol" inputmode="decimal" step="1" min="0" placeholder="e.g. 40"><span class="unit">gal</span></div></div>
+        <button class="clearbtn" id="resetBtn" type="button">Reset defaults</button>
+      </div>
+    </div>
+    <div class="panel legend">
+      <div class="grouplabel">Salts</div>
+      <ul>
+        <li><code>CaCl&#8322;</code> Calcium chloride dihydrate (CaCl&#8322;&middot;2H&#8322;O), Vivion</li>
+        <li><code>MgSO&#8322;</code> Epsom salt, heptahydrate (MgSO&#8322;&middot;7H&#8322;O)</li>
+        <li><code>K&#8322;SO&#8324;</code> Potassium sulfate</li>
+        <li><code>NaHCO&#8323;</code> Baking soda</li>
+      </ul>
+    </div>
+    <footer>
+      Calibrated to your measured 5 gal blend (GH&nbsp;8 / KH&nbsp;5).<br>
+      QS to volume, then test &mdash; the reading is your start. Ca:Mg &asymp; 3:1 holds exactly
+      from RO or a prior house batch; only drifts if starting hardness came from a
+      non-3:1 source (tap, substrate leach).
+    </footer>
+  </section>
+
+  <!-- PARAMETER LOG -->
+  <section class="view" id="view-tracker">
+    <h2 class="viewtitle">Parameter Log</h2>
+    <p class="viewsub">Quick field capture at the tank.</p>
+
+    <div class="syncchip" id="syncChip"></div>
+
+    <div class="panel">
+      <div class="row2">
+        <div class="field"><label for="logWhen" id="whenLabel">Water Change Date</label><input type="datetime-local" id="logWhen" class="selbox"></div>
+        <div class="field" id="fld-tank"><label for="logTank">Tank</label><select id="logTank" class="selbox"></select></div>
+      </div>
+
+      <div class="field" id="fld-blendlabel" style="display:none;margin-top:12px">
+        <label for="blendLabel">Blend label</label>
+        <input type="text" id="blendLabel" class="selbox" placeholder="e.g. Sep 18 zero-GH">
+      </div>
+
+      <div class="divider"></div>
+      <div class="grouplabel">Reading type</div>
+      <div class="seg" id="logType"></div>
+
+      <div class="field" id="fld-blendused" style="margin-top:14px">
+        <label for="blendUsed">Blend used</label>
+        <select id="blendUsed" class="selbox"></select>
+      </div>
+
+      <div class="divider"></div>
+      <div class="grouplabel" id="metLabel">Measurements</div>
+      <div class="metgrid" id="metGrid">
+        <div class="field" id="fld-ph"><label for="mPh">pH</label><input type="number" id="mPh" inputmode="decimal" step="0.1" min="0"></div>
+        <div class="field" id="fld-kh"><label for="mKh">KH</label><div class="inputwrap"><input type="number" id="mKh" inputmode="decimal" step="0.5" min="0"><span class="unit">dKH</span></div></div>
+        <div class="field" id="fld-gh"><label for="mGh">GH</label><div class="inputwrap"><input type="number" id="mGh" inputmode="decimal" step="0.5" min="0"><span class="unit">dGH</span></div></div>
+        <div class="field" id="fld-tds"><label for="mTds">TDS</label><input type="number" id="mTds" inputmode="numeric" step="1" min="0"></div>
+        <div class="field" id="fld-ammonia"><label for="mAmmonia">Ammonia</label><input type="number" id="mAmmonia" inputmode="decimal" step="0.25" min="0"></div>
+        <div class="field" id="fld-nitrite"><label for="mNitrite">Nitrite</label><input type="number" id="mNitrite" inputmode="decimal" step="0.25" min="0"></div>
+        <div class="field" id="fld-nitrate"><label for="mNitrate">Nitrate</label><input type="number" id="mNitrate" inputmode="numeric" step="1" min="0"></div>
+        <div class="field" id="fld-temp"><label for="mTemp">Temp</label><div class="inputwrap"><input type="number" id="mTemp" inputmode="decimal" step="0.5" min="0"><span class="unit">&deg;F</span></div></div>
+      </div>
+
+      <div class="field" style="margin-top:14px">
+        <label for="mNotes">Notes</label>
+        <input type="text" id="mNotes" class="selbox" placeholder="optional">
+      </div>
+
+      <button class="savebtn" id="saveBtn" type="button">Save reading</button>
+      <div class="saved" id="savedMsg"></div>
+    </div>
+
+    <div class="panel">
+      <div class="grouplabel">Recent</div>
+      <div id="recentList" class="recent"></div>
+    </div>
+  </section>
+
+  <!-- TRENDS (placeholder) -->
+  <section class="view" id="view-graphs">
+    <h2 class="viewtitle">Trends</h2>
+    <p class="viewsub">Parameter history and charts.</p>
+    <div class="panel placeholder">
+      <p>Next after the log has data flowing. Reads the same sheet and plots GH / KH / TDS over time per tank &mdash; including the substrate leach curves.</p>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view" id="view-settings">
+    <h2 class="viewtitle">Settings</h2>
+    <p class="viewsub">Data sync and tank list.</p>
+    <div class="panel">
+      <div class="grouplabel">Spreadsheet endpoint</div>
+      <input type="url" id="endpoint" class="selbox" placeholder="https://script.google.com/macros/s/&hellip;/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="btnrow">
+        <button class="clearbtn" id="saveEndpoint" type="button">Save</button>
+        <button class="clearbtn" id="testEndpoint" type="button">Test</button>
+      </div>
+      <div class="saved" id="epMsg" style="text-align:left"></div>
+      <p class="hint">Paste the Web App URL from your Apps Script deployment. Stored only on this device.</p>
+    </div>
+    <div class="panel">
+      <div class="grouplabel">Sync</div>
+      <div class="syncline" id="syncLine"></div>
+      <button class="clearbtn" id="syncNowBtn" type="button">Sync now</button>
+    </div>
+    <div class="panel">
+      <div class="grouplabel">Tanks</div>
+      <div id="tankEditor" class="tankeditor"></div>
+      <div class="btnrow">
+        <input type="text" id="newTank" class="selbox" placeholder="Add a tank">
+        <button class="clearbtn" id="addTank" type="button">Add</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOOLS = [
+    { id: "remin",   name: "Remineralization", desc: "Salt doses per batch",          status: "live",
+      icon: '<path d="M12 2s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/>' },
+    { id: "tracker", name: "Parameter Log",    desc: "Log tank readings in the field", status: "live",
+      icon: '<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
+    { id: "graphs",  name: "Trends",           desc: "Parameter history & charts",     status: "next",
+      icon: '<path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l3-4 3 2 4-6"/>' }
+  ];
+  var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  function renderHub() {
+    var html = "";
+    for (var i = 0; i < TOOLS.length; i++) {
+      var t = TOOLS[i], live = t.status === "live";
+      html += '<button class="tool" data-go="' + t.id + '"' + (live ? "" : " disabled") + '>' +
+        '<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + t.icon + '</svg></span>' +
+        '<span class="body"><span class="n">' + t.name + '</span><span class="d">' + t.desc + '</span></span>' +
+        (live ? '<span class="chev">' + CHEV + '</span>' : '<span class="badge">Next</span>') + '</button>';
+    }
+    document.getElementById("toolList").innerHTML = html;
+    document.querySelectorAll(".tool[data-go]").forEach(function (b) {
+      if (b.disabled) return;
+      b.addEventListener("click", function () { location.hash = "#/" + b.getAttribute("data-go"); });
+    });
+  }
+
+  var VALID = { hub: 1, remin: 1, tracker: 1, graphs: 1, settings: 1 };
+  function currentView() { var h = (location.hash || "").replace(/^#\/?/, ""); return VALID[h] ? h : "hub"; }
+  function route() {
+    var v = currentView();
+    document.querySelectorAll(".view").forEach(function (s) { s.classList.remove("active"); });
+    var elv = document.getElementById("view-" + v); if (elv) elv.classList.add("active");
+    document.getElementById("backBtn").classList.toggle("show", v !== "hub");
+    if (v === "tracker") { var w = document.getElementById("logWhen"); if (w && !w.value) w.value = nowLocal(); renderSyncChip(); renderRecent(); renderBlendUsed(); }
+    if (v === "settings") { renderSettings(); }
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", route);
+  document.getElementById("backBtn").addEventListener("click", function () { location.hash = "#/"; });
+  document.getElementById("gearBtn").addEventListener("click", function () { location.hash = "#/settings"; });
+
+  /* ---------- calculator ---------- */
+  var CACL2_PER_DGH_GAL = 2.6/8/5, MGSO4_PER_DGH_GAL = 2.3/8/5, NAHCO3_PER_DKH_GAL = 3.1/5/5, K2SO4_PER_GAL = 0.5/5;
+  var FIXED = [10,15,20,25,30], STORE_KEY = "remin.v1";
+  var el = {};
+  ["startGH","startKH","targetGH","targetKH","useK","customVol","tbody","summary","notes","kHead","resetBtn"].forEach(function(id){ el[id]=document.getElementById(id); });
+  function num(v){ var n=parseFloat(v); return isFinite(n)?n:0; }
+  function fmtg(g){ if(g<=0) return {txt:"\u2014",zero:true}; if(g<0.05) return {txt:"<0.1",zero:false}; return {txt:g.toFixed(1),zero:false}; }
+  function cell(o){ return "<td class='"+(o.zero?"zero":"")+"'>"+o.txt+"</td>"; }
+  function cnote(t){ return "<div class='note'><span class='dot'>!</span><span>"+t+"</span></div>"; }
+  function rowHTML(gal,dGH,dKH,useK,isCustom){
+    var ca=fmtg(CACL2_PER_DGH_GAL*dGH*gal), mg=fmtg(MGSO4_PER_DGH_GAL*dGH*gal), k=useK?fmtg(K2SO4_PER_GAL*gal):{txt:"\u2014",zero:true}, na=fmtg(NAHCO3_PER_DKH_GAL*dKH*gal);
+    var vol=(Math.round(gal*10)/10)+" <span>gal</span>";
+    return "<tr"+(isCustom?" class='custom'":"")+"><td class='vol'>"+vol+"</td>"+cell(ca)+cell(mg)+cell(k)+cell(na)+"</tr>";
+  }
+  function compute(){
+    var sGH=num(el.startGH.value), sKH=num(el.startKH.value), tGH=num(el.targetGH.value), tKH=num(el.targetKH.value), useK=el.useK.checked;
+    var dGH=Math.max(0,tGH-sGH), dKH=Math.max(0,tKH-sKH);
+    el.kHead.style.opacity=useK?"1":".35";
+    el.summary.innerHTML="Adding <b>"+(Math.round(dGH*10)/10)+"</b> dGH &nbsp;&middot;&nbsp; <b>"+(Math.round(dKH*10)/10)+"</b> dKH";
+    var n=""; if(tGH-sGH<0) n+=cnote("Starting GH is above target \u2014 salts can\u2019t lower it. Dilute with more RO."); if(tKH-sKH<0) n+=cnote("Starting KH is above target \u2014 dilute with more RO to bring it down.");
+    el.notes.innerHTML=n;
+    var rows=""; for(var i=0;i<FIXED.length;i++) rows+=rowHTML(FIXED[i],dGH,dKH,useK,false);
+    var c=num(el.customVol.value); if(c>0) rows+=rowHTML(c,dGH,dKH,useK,true);
+    el.tbody.innerHTML=rows; saveCalc();
+  }
+  function saveCalc(){ try{ localStorage.setItem(STORE_KEY,JSON.stringify({sGH:el.startGH.value,sKH:el.startKH.value,tGH:el.targetGH.value,tKH:el.targetKH.value,useK:el.useK.checked})); }catch(e){} }
+  function loadCalc(){ try{ var s=JSON.parse(localStorage.getItem(STORE_KEY)||"null"); if(!s) return; if(s.sGH!=null)el.startGH.value=s.sGH; if(s.sKH!=null)el.startKH.value=s.sKH; if(s.tGH!=null)el.targetGH.value=s.tGH; if(s.tKH!=null)el.targetKH.value=s.tKH; if(typeof s.useK==="boolean")el.useK.checked=s.useK; }catch(e){} }
+  function resetCalc(){ el.startGH.value=0; el.startKH.value=0; el.targetGH.value=8; el.targetKH.value=5; el.useK.checked=true; el.customVol.value=""; compute(); }
+  ["startGH","startKH","targetGH","targetKH","customVol"].forEach(function(id){ el[id].addEventListener("input",compute); });
+  el.useK.addEventListener("change",compute); el.resetBtn.addEventListener("click",resetCalc);
+
+  /* ---------- parameter log ---------- */
+  var LG = { endpoint:"", tanks:[], types:["Pre-change","Post-change (24h)","Blend reference","Spot"], entries:[], lastTank:"", lastType:"Pre-change", lastSync:0, syncing:false };
+  var K = { ep:"log.endpoint", tanks:"log.tanks", entries:"log.entries", lt:"log.lastTank", ltype:"log.lastType", ls:"log.lastSync" };
+  var DEFAULT_TANKS = ["Office 90U","Living Room 45U","Dining Room 35A","Endor 90P","10g Guppy","Bioglobe"];
+  var METRIC_KEYS = ["ph","kh","gh","tds","ammonia","nitrite","nitrate","temp"];
+
+  function uid(){ try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+  function lsGet(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function pad2(n){ return (n<10?"0":"")+n; }
+  function nowLocal(){ var d=new Date(); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())+"T"+pad2(d.getHours())+":"+pad2(d.getMinutes()); }
+  var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function shortDate(d){ d=d||new Date(); return MON[d.getMonth()]+" "+d.getDate(); }
+  function defaultBlendLabel(){ return "Blend "+shortDate(new Date()); }
+
+  function lgLoad(){
+    LG.endpoint=lsGet(K.ep,"");
+    try{ LG.tanks=JSON.parse(lsGet(K.tanks,"null"))||DEFAULT_TANKS.slice(); }catch(e){ LG.tanks=DEFAULT_TANKS.slice(); }
+    if(!LG.tanks.length) LG.tanks=DEFAULT_TANKS.slice();
+    try{ LG.entries=JSON.parse(lsGet(K.entries,"[]"))||[]; }catch(e){ LG.entries=[]; }
+    sortEntries();
+    LG.lastTank=lsGet(K.lt,LG.tanks[0]); LG.lastType=lsGet(K.ltype,"Pre-change"); LG.lastSync=parseInt(lsGet(K.ls,"0"),10)||0;
+  }
+  function lgPersist(){ lsSet(K.ep,LG.endpoint); lsSet(K.tanks,JSON.stringify(LG.tanks)); lsSet(K.entries,JSON.stringify(LG.entries)); lsSet(K.lt,LG.lastTank); lsSet(K.ltype,LG.lastType); lsSet(K.ls,String(LG.lastSync)); }
+  function sortEntries(){ LG.entries.sort(function(a,b){ return (new Date(b.ts))-(new Date(a.ts)); }); }
+
+  function isBlendType(t){ return t==="Blend reference"; }
+  function show(id,on){ var e=document.getElementById(id); if(e) e.style.display = on?"":"none"; }
+  function applyType(type){
+    var blend=isBlendType(type);
+    show("fld-tank",!blend); show("fld-blendlabel",blend); show("fld-blendused",!blend);
+    document.getElementById("whenLabel").textContent = blend ? "Mix date" : "Water Change Date";
+    show("fld-ph",!blend); show("fld-kh",true); show("fld-gh",true); show("fld-tds",!blend);
+    show("fld-ammonia",!blend); show("fld-nitrite",!blend); show("fld-nitrate",!blend); show("fld-temp",!blend);
+    document.getElementById("metLabel").textContent = blend ? "Blend parameters" : "Measurements";
+    document.getElementById("saveBtn").textContent = blend ? "Save blend" : "Save reading";
+    if(blend){ var bl=document.getElementById("blendLabel"); if(!bl.value) bl.value=defaultBlendLabel(); }
+  }
+
+  function renderLogControls(){
+    var sel=document.getElementById("logTank");
+    sel.innerHTML=LG.tanks.map(function(t){ return '<option'+(t===LG.lastTank?' selected':'')+'>'+esc(t)+'</option>'; }).join("");
+    sel.onchange=function(){ LG.lastTank=sel.value; lgPersist(); };
+    var seg=document.getElementById("logType");
+    seg.innerHTML=LG.types.map(function(t){ return '<button type="button" class="segbtn'+(t===LG.lastType?' on':'')+'" data-type="'+esc(t)+'">'+esc(t)+'</button>'; }).join("");
+    seg.querySelectorAll(".segbtn").forEach(function(b){ b.addEventListener("click",function(){ LG.lastType=b.getAttribute("data-type"); lgPersist(); seg.querySelectorAll(".segbtn").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); applyType(LG.lastType); }); });
+    var w=document.getElementById("logWhen"); if(!w.value) w.value=nowLocal();
+    applyType(LG.lastType); renderBlendUsed();
+  }
+
+  function currentBlends(){ var seen={}, out=[]; for(var i=0;i<LG.entries.length;i++){ var e=LG.entries[i]; if(isBlendType(e.type)){ var lbl=e.blend||("Blend "+shortDate(new Date(e.ts))); if(!seen[lbl]){ seen[lbl]=1; out.push(lbl); } } } return out; }
+  function renderBlendUsed(){
+    var sel=document.getElementById("blendUsed"); if(!sel) return; var cur=sel.value;
+    var bl=currentBlends();
+    sel.innerHTML='<option value="">\u2014 none \u2014</option>'+bl.map(function(l){ return '<option>'+esc(l)+'</option>'; }).join("");
+    if(cur && bl.indexOf(cur)!==-1) sel.value=cur;
+  }
+
+  function flashSaved(msg,warn){ var e=document.getElementById("savedMsg"); e.textContent=msg; e.style.color=warn?"var(--warn)":"var(--readout)"; clearTimeout(flashSaved._t); flashSaved._t=setTimeout(function(){ e.textContent=""; },2500); }
+
+  function readVal(id){ var x=document.getElementById(id).value; if(x==="") return null; var n=parseFloat(x); return isFinite(n)?n:null; }
+
+  function saveReading(){
+    var type=LG.lastType, blend=isBlendType(type);
+    var when=document.getElementById("logWhen").value;
+    var ts=when?new Date(when).toISOString():new Date().toISOString();
+    var notes=document.getElementById("mNotes").value.trim();
+    var e;
+    if(blend){
+      var label=document.getElementById("blendLabel").value.trim()||defaultBlendLabel();
+      var kh=readVal("mKh"), gh=readVal("mGh");
+      if(kh==null && gh==null){ flashSaved("Enter KH or GH.",true); return; }
+      e={ id:uid(), ts:ts, tank:"Mixing batch", type:type, ph:null, kh:kh, gh:gh, tds:null, ammonia:null, nitrite:null, nitrate:null, temp:null, blend:label, notes:notes, synced:false };
+    } else {
+      var tank=document.getElementById("logTank").value;
+      e={ id:uid(), ts:ts, tank:tank, type:type,
+        ph:readVal("mPh"), kh:readVal("mKh"), gh:readVal("mGh"), tds:readVal("mTds"),
+        ammonia:readVal("mAmmonia"), nitrite:readVal("mNitrite"), nitrate:readVal("mNitrate"), temp:readVal("mTemp"),
+        blend:document.getElementById("blendUsed").value||"", notes:notes, synced:false };
+      var has=METRIC_KEYS.some(function(k){return e[k]!=null;})||notes;
+      if(!has){ flashSaved("Enter at least one value.",true); return; }
+      LG.lastTank=tank;
+    }
+    LG.entries.unshift(e); sortEntries(); lgPersist();
+    ["mPh","mKh","mGh","mTds","mAmmonia","mNitrite","mNitrate","mTemp","mNotes"].forEach(function(id){ document.getElementById(id).value=""; });
+    if(blend) document.getElementById("blendLabel").value="";
+    document.getElementById("logWhen").value=nowLocal();
+    flashSaved("Saved."); renderRecent(); renderBlendUsed(); renderSyncChip(); syncNow();
+  }
+
+  function fmtVals(e){
+    if(isBlendType(e.type)){ var b=[]; if(e.kh!=null)b.push("KH "+e.kh); if(e.gh!=null)b.push("GH "+e.gh); return b.join("  \u00b7  "); }
+    var p=[];
+    if(e.ph!=null)p.push("pH "+e.ph);
+    if(e.kh!=null)p.push("KH "+e.kh);
+    if(e.gh!=null)p.push("GH "+e.gh);
+    if(e.tds!=null)p.push("TDS "+e.tds);
+    if(e.ammonia!=null)p.push("Ammonia "+e.ammonia);
+    if(e.nitrite!=null)p.push("Nitrite "+e.nitrite);
+    if(e.nitrate!=null)p.push("Nitrate "+e.nitrate);
+    if(e.temp!=null)p.push(e.temp+"\u00b0F");
+    return p.join("  \u00b7  ");
+  }
+  function fmtWhen(iso){ var d=new Date(iso); if(isNaN(d)) return ""; var hr=d.getHours(), ap=hr<12?"AM":"PM", h12=hr%12; if(h12===0)h12=12; return MON[d.getMonth()]+" "+d.getDate()+", "+h12+":"+pad2(d.getMinutes())+" "+ap; }
+  function renderRecent(){
+    var box=document.getElementById("recentList"); if(!box) return;
+    if(!LG.entries.length){ box.innerHTML='<div class="empty">No readings yet.</div>'; return; }
+    var html="";
+    for(var i=0;i<Math.min(8,LG.entries.length);i++){
+      var e=LG.entries[i], vals=fmtVals(e), blend=isBlendType(e.type);
+      var head = blend ? ('<b>'+esc(e.blend||"Blend")+'</b> &middot; Blend') : ('<b>'+esc(e.tank)+'</b> &middot; '+esc(e.type));
+      var usedBlend = (!blend && e.blend) ? '<div class="rvals">blend: '+esc(e.blend)+'</div>' : '';
+      html+='<div class="r"><span class="rdot'+(e.synced?"":" pend")+'"></span><div class="rbody">'+
+        '<div class="rhead">'+head+'</div>'+
+        '<div class="rmeta">'+fmtWhen(e.ts)+(e.synced?"":" &middot; pending")+'</div>'+
+        (vals?'<div class="rvals">'+vals+'</div>':'')+ usedBlend +
+        (e.notes?'<div class="rvals">'+esc(e.notes)+'</div>':'')+
+        '</div></div>';
+    }
+    box.innerHTML=html;
+  }
+
+  function pendingCount(){ var c=0; for(var i=0;i<LG.entries.length;i++) if(!LG.entries[i].synced) c++; return c; }
+  function renderSyncChip(){
+    var elc=document.getElementById("syncChip"); if(!elc) return;
+    if(!LG.endpoint){ elc.innerHTML='<span class="s-state"><span class="dot2"></span>Not connected</span><button id="chipSet">Set up sync</button>'; var b=document.getElementById("chipSet"); if(b) b.onclick=function(){ location.hash="#/settings"; }; return; }
+    var p=pendingCount(); var state=p?'<span class="dot2 pend"></span>'+p+' pending':'<span class="dot2 ok"></span>Synced';
+    elc.innerHTML='<span class="s-state">'+state+'</span><button id="chipSync">'+(LG.syncing?"Syncing\u2026":"Sync now")+'</button>';
+    var b2=document.getElementById("chipSync"); if(b2) b2.onclick=function(){ syncNow(); };
+  }
+
+  function n2(x){ if(x===""||x==null) return null; var n=parseFloat(x); return isFinite(n)?n:null; }
+  function normalizeRemote(o){ return { id:o.id, ts:o.timestamp||o.ts||"", tank:o.tank||"", type:o.type||"", ph:n2(o.ph), kh:n2(o.kh), gh:n2(o.gh), tds:n2(o.tds), ammonia:n2(o.ammonia), nitrite:n2(o.nitrite), nitrate:n2(o.nitrate), temp:n2(o.temp), blend:o.blend||"", notes:o.notes||"", synced:true }; }
+  function mergeRemote(list){
+    var have={}; for(var i=0;i<LG.entries.length;i++) have[String(LG.entries[i].id)]=LG.entries[i];
+    var changed=false;
+    for(var j=0;j<list.length;j++){ var r=list[j]; if(!r.id) continue; if(have[String(r.id)]){ have[String(r.id)].synced=true; } else { LG.entries.push(normalizeRemote(r)); changed=true; } }
+    if(changed) sortEntries();
+  }
+
+  function markSynced(id){ for(var i=0;i<LG.entries.length;i++){ if(String(LG.entries[i].id)===String(id)) LG.entries[i].synced=true; } }
+  function syncNow(){
+    if(!LG.endpoint || LG.syncing) return;
+    if(navigator.onLine===false){ renderSyncChip(); return; }
+    LG.syncing=true; renderSyncChip(); renderSettings();
+    var unsynced=LG.entries.filter(function(e){return !e.synced;});
+    var pushP=Promise.resolve();
+    if(unsynced.length){
+      pushP=fetch(LG.endpoint,{method:"POST",body:JSON.stringify({entries:unsynced})}).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok&&res.accepted){ res.accepted.forEach(markSynced); } }).catch(function(){});
+    }
+    pushP.then(function(){
+      return fetch(LG.endpoint).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok&&res.entries){ mergeRemote(res.entries); } }).catch(function(){});
+    }).then(function(){
+      LG.lastSync=Date.now(); LG.syncing=false; lgPersist(); renderSyncChip(); renderRecent(); renderBlendUsed(); renderSettings();
+    });
+  }
+
+  function fmtAgo(ts){ if(!ts) return "never"; var s=Math.round((Date.now()-ts)/1000); if(s<60) return s+"s ago"; var m=Math.round(s/60); if(m<60) return m+"m ago"; var h=Math.round(m/60); if(h<24) return h+"h ago"; return Math.round(h/24)+"d ago"; }
+  function epMsg(m,warn){ var e=document.getElementById("epMsg"); if(!e) return; e.textContent=m; e.style.color=warn?"var(--warn)":"var(--readout)"; }
+  function renderSettings(){
+    var ep=document.getElementById("endpoint"); if(ep && document.activeElement!==ep) ep.value=LG.endpoint;
+    var sl=document.getElementById("syncLine"); if(sl){ var p=pendingCount(); sl.innerHTML=LG.endpoint?("Last sync "+fmtAgo(LG.lastSync)+" &middot; "+(p?(p+" pending"):"all synced")):"No endpoint set yet."; }
+    var te=document.getElementById("tankEditor");
+    if(te){ te.innerHTML=LG.tanks.map(function(t){ return '<div class="t"><span>'+esc(t)+'</span><button data-del="'+esc(t)+'">Remove</button></div>'; }).join("");
+      te.querySelectorAll("button[data-del]").forEach(function(b){ b.onclick=function(){ var name=b.getAttribute("data-del"); LG.tanks=LG.tanks.filter(function(x){return x!==name;}); if(LG.lastTank===name) LG.lastTank=LG.tanks[0]||""; lgPersist(); renderSettings(); renderLogControls(); }; });
+    }
+  }
+
+  document.getElementById("saveBtn").addEventListener("click", saveReading);
+  document.getElementById("saveEndpoint").addEventListener("click", function(){ LG.endpoint=document.getElementById("endpoint").value.trim(); lgPersist(); epMsg("Saved."); renderSyncChip(); syncNow(); });
+  document.getElementById("testEndpoint").addEventListener("click", function(){
+    var url=document.getElementById("endpoint").value.trim(); if(!url){ epMsg("Paste a URL first.",true); return; } epMsg("Testing\u2026");
+    fetch(url).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok){ epMsg("Connected. "+(res.entries?res.entries.length:0)+" rows in the sheet."); } else epMsg("Reached it, but the response was unexpected.",true); }).catch(function(){ epMsg("Couldn\u2019t reach it \u2014 check the URL and that access is set to Anyone.",true); });
+  });
+  document.getElementById("syncNowBtn").addEventListener("click", function(){ syncNow(); });
+  document.getElementById("addTank").addEventListener("click", function(){ var i=document.getElementById("newTank"); var name=i.value.trim(); if(!name) return; if(LG.tanks.indexOf(name)===-1){ LG.tanks.push(name); lgPersist(); renderSettings(); renderLogControls(); } i.value=""; });
+  window.addEventListener("online", syncNow);
+
+  /* ---------- init ---------- */
+  renderHub();
+  loadCalc(); compute();
+  lgLoad(); renderLogControls(); renderRecent(); renderSyncChip(); renderSettings();
+  route();
+  if (LG.endpoint) syncNow();
+})();
+</script>
+</body>
+</html>
