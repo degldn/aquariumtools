@@ -146,6 +146,16 @@
   .tankeditor .volinput { width: 66px; font: inherit; font-size: .86rem; background: var(--field-bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; -moz-appearance: textfield; }
   .tankeditor .volinput::-webkit-outer-spin-button, .tankeditor .volinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .tankeditor .t button { color: var(--warn); background: none; border: none; font: inherit; font-size: .82rem; cursor: pointer; }
+  .chartcard { padding: 12px 12px 10px; }
+  .charthead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .charthead .cname { font-weight: 620; font-size: .92rem; }
+  .charthead .clatest { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .chart-empty { color: var(--faint); font-size: .82rem; padding: 22px 2px; text-align: center; }
+  .sectlabel { font-size: .74rem; color: var(--faint); font-weight: 600; letter-spacing: .04em; margin: 22px 2px 10px; }
+  .trend-legend { display: flex; gap: 16px; font-size: .76rem; color: var(--muted); margin: 0 2px 10px; }
+  .trend-legend .k { display: inline-flex; align-items: center; gap: 6px; }
+  .trend-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
   footer { color: var(--faint); font-size: .76rem; text-align: center; margin-top: 26px; line-height: 1.6; }
 </style>
 </head>
@@ -251,8 +261,8 @@
 
   <section class="view" id="view-graphs">
     <h2 class="viewtitle">Trends</h2>
-    <p class="viewsub">Parameter history and charts.</p>
-    <div class="panel placeholder"><p>Next after the log has data flowing. Reads the same sheet and plots GH / KH / TDS over time per tank &mdash; including the substrate leach curves.</p></div>
+    <p class="viewsub">Per-tank parameter history.</p>
+    <div id="trendsBody"></div>
   </section>
 
   <section class="view" id="view-settings">
@@ -285,7 +295,7 @@
   var TOOLS = [
     { id:"remin", name:"Remineralization", desc:"Salt doses per batch", status:"live", icon:'<path d="M12 2s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/>' },
     { id:"tracker", name:"Parameter Log", desc:"Log tank readings in the field", status:"live", icon:'<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>' },
-    { id:"graphs", name:"Trends", desc:"Parameter history & charts", status:"next", icon:'<path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l3-4 3 2 4-6"/>' }
+    { id:"graphs", name:"Trends", desc:"Parameter history & charts", status:"live", icon:'<path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l3-4 3 2 4-6"/>' }
   ];
   var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -308,6 +318,7 @@
     document.getElementById("backBtn").classList.toggle("show", v!=="hub");
     if(v==="tracker"){ var w=document.getElementById("logWhen"); if(w&&!w.value) w.value=nowLocal(); renderSyncChip(); renderRecent(); renderBlendUsed(); updateWcPct(); }
     if(v==="settings"){ renderSettings(); }
+    if(v==="graphs"){ renderTrends(); }
     window.scrollTo(0,0);
   }
   window.addEventListener("hashchange",route);
@@ -471,7 +482,7 @@
     LG.syncing=true; renderSyncChip(); renderSettings();
     var uns=LG.entries.filter(function(e){return !e.synced;}), pushP=Promise.resolve();
     if(uns.length){ pushP=fetch(LG.endpoint,{method:"POST",body:JSON.stringify({entries:uns})}).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok&&res.accepted){ res.accepted.forEach(markSynced); } }).catch(function(){}); }
-    pushP.then(function(){ return fetch(LG.endpoint).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok&&res.entries){ mergeRemote(res.entries); } }).catch(function(){}); }).then(function(){ LG.lastSync=Date.now(); LG.syncing=false; lgPersist(); renderSyncChip(); renderRecent(); renderBlendUsed(); renderSettings(); });
+    pushP.then(function(){ return fetch(LG.endpoint).then(function(r){return r.json();}).then(function(res){ if(res&&res.ok&&res.entries){ mergeRemote(res.entries); } }).catch(function(){}); }).then(function(){ LG.lastSync=Date.now(); LG.syncing=false; lgPersist(); renderSyncChip(); renderRecent(); renderBlendUsed(); renderSettings(); if(currentView()==="graphs") renderTrends(); });
   }
 
   function fmtAgo(ts){ if(!ts) return "never"; var s=Math.round((Date.now()-ts)/1000); if(s<60) return s+"s ago"; var m=Math.round(s/60); if(m<60) return m+"m ago"; var h=Math.round(m/60); if(h<24) return h+"h ago"; return Math.round(h/24)+"d ago"; }
@@ -494,6 +505,75 @@
   document.getElementById("syncNowBtn").addEventListener("click",function(){ syncNow(); });
   document.getElementById("addTank").addEventListener("click",function(){ var i=document.getElementById("newTank"), name=i.value.trim(); if(!name) return; if(tankNames().indexOf(name)===-1){ LG.tanks.push({name:name, vol:(KNOWN_VOL[name]!=null?KNOWN_VOL[name]:null)}); lgPersist(); renderSettings(); renderLogControls(); } i.value=""; });
   window.addEventListener("online",syncNow);
+
+  /* trends */
+  var TR={ tank:"", lineType:"Pre-change" };
+  var LINE_PARAMS=[{k:"gh",label:"GH",unit:"dGH"},{k:"kh",label:"KH",unit:"dKH"},{k:"tds",label:"TDS",unit:"ppm"},{k:"ph",label:"pH",unit:""},{k:"nitrate",label:"Nitrate",unit:"ppm"}];
+  var BAR_PARAMS=[{k:"gh",label:"GH",unit:"dGH"},{k:"kh",label:"KH",unit:"dKH"},{k:"tds",label:"TDS",unit:"ppm"}];
+  function fmtNum(n){ if(n==null) return ""; var r=Math.round(n*10)/10; return (r%1===0)?String(r):r.toFixed(1); }
+  function tsOf(e){ var t=new Date(e.ts).getTime(); return isFinite(t)?t:null; }
+  function tanksWithData(){ var seen={},out=[]; for(var i=0;i<LG.entries.length;i++){ var e=LG.entries[i]; if(isBlendType(e.type)) continue; if(!e.tank||e.tank==="Mixing batch") continue; if(!seen[e.tank]){ seen[e.tank]=1; out.push(e.tank); } } return out; }
+  function seriesFor(tank,type,k){ var p=[]; for(var i=0;i<LG.entries.length;i++){ var e=LG.entries[i]; if(e.tank!==tank||e.type!==type||e[k]==null) continue; var t=tsOf(e); if(t==null) continue; p.push({t:t,v:e[k]}); } p.sort(function(a,b){return a.t-b.t;}); return p; }
+  function pairsFor(tank,k){
+    var pre=[],post=[],i;
+    for(i=0;i<LG.entries.length;i++){ var e=LG.entries[i]; if(e.tank!==tank||e[k]==null) continue; var t=tsOf(e); if(t==null) continue; if(e.type==="Pre-change") pre.push({t:t,v:e[k]}); else if(e.type==="Post-change (24h)") post.push({t:t,v:e[k]}); }
+    pre.sort(function(a,b){return a.t-b.t;}); post.sort(function(a,b){return a.t-b.t;});
+    var used={},out=[],WIN=48*3600*1000;
+    for(i=0;i<pre.length;i++){ var m=null; for(var q=0;q<post.length;q++){ if(used[q]) continue; var dt=post[q].t-pre[i].t; if(dt>0&&dt<=WIN){ m=q; break; } } out.push({t:pre[i].t,pre:pre[i].v,post:(m!=null?post[m].v:null)}); if(m!=null) used[m]=1; }
+    out.sort(function(a,b){return a.t-b.t;}); return out;
+  }
+  function lineSVG(pts){
+    if(pts.length<2) return '<div class="chart-empty">Not enough data yet.</div>';
+    var W=300,H=140,x0=30,x1=W-8,y0=10,y1=H-22,i,ts=[],vs=[];
+    for(i=0;i<pts.length;i++){ ts.push(pts[i].t); vs.push(pts[i].v); }
+    var tmin=Math.min.apply(null,ts),tmax=Math.max.apply(null,ts),dmin=Math.min.apply(null,vs),dmax=Math.max.apply(null,vs),vmin,vmax;
+    if(dmin===dmax){ vmin=dmin-1; vmax=dmax+1; } else { var pd=(dmax-dmin)*0.15; vmin=dmin-pd; vmax=dmax+pd; }
+    if(vmin<0) vmin=0;
+    function sx(t){ return tmax===tmin?(x0+x1)/2:x0+(t-tmin)/(tmax-tmin)*(x1-x0); }
+    function sy(v){ return vmax===vmin?(y0+y1)/2:y1-(v-vmin)/(vmax-vmin)*(y1-y0); }
+    var g="",yt=[dmin,(dmin+dmax)/2,dmax];
+    for(i=0;i<3;i++){ var yy=sy(yt[i]); g+='<line x1="'+x0+'" y1="'+yy.toFixed(1)+'" x2="'+x1+'" y2="'+yy.toFixed(1)+'" stroke="var(--line-soft)" stroke-width="0.6"/><text x="'+(x0-3)+'" y="'+(yy+2.4).toFixed(1)+'" text-anchor="end" font-size="7" fill="var(--faint)">'+fmtNum(yt[i])+'</text>'; }
+    var d=""; for(i=0;i<pts.length;i++){ d+=(i?"L":"M")+sx(pts[i].t).toFixed(1)+" "+sy(pts[i].v).toFixed(1)+" "; }
+    g+='<path d="'+d+'" fill="none" stroke="var(--readout)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>';
+    for(i=0;i<pts.length;i++){ g+='<circle cx="'+sx(pts[i].t).toFixed(1)+'" cy="'+sy(pts[i].v).toFixed(1)+'" r="1.8" fill="var(--readout)"/>'; }
+    g+='<text x="'+x0+'" y="'+(H-6)+'" text-anchor="start" font-size="7" fill="var(--faint)">'+shortDate(new Date(tmin))+'</text><text x="'+x1+'" y="'+(H-6)+'" text-anchor="end" font-size="7" fill="var(--faint)">'+shortDate(new Date(tmax))+'</text>';
+    return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+'</svg>';
+  }
+  function barSVG(pairs){
+    var ps=[],i; for(i=0;i<pairs.length;i++){ if(pairs[i].pre!=null||pairs[i].post!=null) ps.push(pairs[i]); }
+    if(!ps.length) return '<div class="chart-empty">No paired changes yet.</div>';
+    if(ps.length>8) ps=ps.slice(ps.length-8);
+    var W=300,H=150,x0=30,x1=W-8,y0=10,y1=H-26,maxv=0;
+    for(i=0;i<ps.length;i++){ if(ps[i].pre!=null)maxv=Math.max(maxv,ps[i].pre); if(ps[i].post!=null)maxv=Math.max(maxv,ps[i].post); }
+    if(maxv<=0) maxv=1; var vmax=maxv*1.12;
+    function sy(v){ return y1-(v/vmax)*(y1-y0); }
+    var n=ps.length,slot=(x1-x0)/n,bw=Math.min(slot*0.34,9),g="",yt=[0,maxv/2,maxv];
+    for(i=0;i<3;i++){ var yy=sy(yt[i]); g+='<line x1="'+x0+'" y1="'+yy.toFixed(1)+'" x2="'+x1+'" y2="'+yy.toFixed(1)+'" stroke="var(--line-soft)" stroke-width="0.6"/><text x="'+(x0-3)+'" y="'+(yy+2.4).toFixed(1)+'" text-anchor="end" font-size="7" fill="var(--faint)">'+fmtNum(yt[i])+'</text>'; }
+    for(var j=0;j<n;j++){ var cx=x0+slot*j+slot/2, dd=new Date(ps[j].t);
+      if(ps[j].pre!=null){ var yp=sy(ps[j].pre); g+='<rect x="'+(cx-bw-1).toFixed(1)+'" y="'+yp.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+(y1-yp).toFixed(1)+'" rx="1" fill="var(--readout)"/>'; }
+      if(ps[j].post!=null){ var yq=sy(ps[j].post); g+='<rect x="'+(cx+1).toFixed(1)+'" y="'+yq.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+(y1-yq).toFixed(1)+'" rx="1" fill="var(--warn)"/>'; }
+      g+='<text x="'+cx.toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="6.5" fill="var(--faint)">'+(dd.getMonth()+1)+'/'+dd.getDate()+'</text>';
+    }
+    return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+'</svg>';
+  }
+  function renderTrends(){
+    var body=document.getElementById("trendsBody"); if(!body) return;
+    var tanks=tanksWithData(),i;
+    if(!tanks.length){ body.innerHTML='<div class="panel placeholder"><p>No readings yet. Log some in the Parameter Log and they\u2019ll chart here.</p></div>'; return; }
+    if(!TR.tank||tanks.indexOf(TR.tank)===-1) TR.tank=(LG.lastTank&&tanks.indexOf(LG.lastTank)!==-1)?LG.lastTank:tanks[0];
+    var h='<div class="panel"><div class="field"><label for="trTank">Tank</label><select id="trTank" class="selbox">'+tanks.map(function(t){return '<option'+(t===TR.tank?' selected':'')+'>'+esc(t)+'</option>';}).join("")+'</select></div></div>';
+    h+='<div class="sectlabel">Trends over time</div>';
+    h+='<div class="seg" id="trType" style="margin:0 2px 12px;">'+["Pre-change","Post-change (24h)"].map(function(t){return '<button type="button" class="segbtn'+(t===TR.lineType?' on':'')+'" data-lt="'+esc(t)+'">'+esc(t)+'</button>';}).join("")+'</div>';
+    for(i=0;i<LINE_PARAMS.length;i++){ var p=LINE_PARAMS[i], pts=seriesFor(TR.tank,TR.lineType,p.k), lv=pts.length?pts[pts.length-1].v:null;
+      h+='<div class="panel chartcard"><div class="charthead"><span class="cname">'+p.label+'</span><span class="clatest">'+(lv==null?"\u2014":(fmtNum(lv)+(p.unit?(" "+p.unit):"")))+'</span></div>'+lineSVG(pts)+'</div>'; }
+    h+='<div class="sectlabel">Change impact \u2014 pre vs 24h post</div>';
+    h+='<div class="trend-legend"><span class="k"><span class="sw" style="background:var(--readout)"></span>Pre-change</span><span class="k"><span class="sw" style="background:var(--warn)"></span>24h post</span></div>';
+    for(i=0;i<BAR_PARAMS.length;i++){ var bp=BAR_PARAMS[i];
+      h+='<div class="panel chartcard"><div class="charthead"><span class="cname">'+bp.label+'</span></div>'+barSVG(pairsFor(TR.tank,bp.k))+'</div>'; }
+    body.innerHTML=h;
+    var tsel=document.getElementById("trTank"); if(tsel) tsel.onchange=function(){ TR.tank=this.value; renderTrends(); };
+    var seg=document.getElementById("trType"); if(seg) seg.querySelectorAll(".segbtn").forEach(function(b){ b.onclick=function(){ TR.lineType=b.getAttribute("data-lt"); renderTrends(); }; });
+  }
 
   renderHub();
   loadCalc(); compute();
